@@ -58,7 +58,7 @@ test('StopApplication captures crash logs before removing the container on a cra
 
     expect($this->application->last_crash_logs)->toBe(['app-container' => "panic: something broke\nexit status 1"]);
     expect($this->application->last_crash_logs_captured_at)->not->toBeNull();
-    expect($this->application->status)->toBe('exited');
+    expect($this->application->status)->toBe('exited:unhealthy');
 });
 
 test('StopApplication clears crash logs on a normal reset stop', function () {

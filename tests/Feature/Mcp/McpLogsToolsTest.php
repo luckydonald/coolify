@@ -215,7 +215,10 @@ test('get_service_container_logs tails a valid container over SSH', function () 
     $response->assertOk();
 
     $body = mcpToolJson($response);
-    expect($body['data']['lines'])->toBe(['line one', 'line two']);
+    expect($body['data']['lines'])->toBe([
+        ['line' => 'line one', 'stderr' => false],
+        ['line' => 'line two', 'stderr' => false],
+    ]);
 });
 
 test('get_application_logs falls back to the crash-log snapshot when no live container exists', function () {
