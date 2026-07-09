@@ -2,11 +2,13 @@
 
 namespace App\Mcp\Tools;
 
+use App\Helpers\SshMultiplexingHelper;
 use App\Mcp\Concerns\BuildsResponse;
 use App\Mcp\Concerns\ResolvesTeam;
 use App\Models\Service;
 use App\Support\ValidationPatterns;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\Process;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -70,13 +72,11 @@ class GetServiceContainerLogs extends Tool
         $timestamps = $request->get('timestamps');
         $timestamps = is_null($timestamps) ? true : (bool) $timestamps;
 
-        $cmd = ($server->isSwarm() ? 'docker service logs' : 'docker logs')." -n {$lines}".($timestamps ? ' -t' : '')." {$container}";
+        $cmd = ($server->isSwarm() ? 'docker service logs' : 'docker logs')." -n {$lines} -t {$container}";
+        $sshCommand = SshMultiplexingHelper::generateSshCommand($server, $cmd);
 
-        $output = instant_remote_process([$cmd], $server, throwError: false);
-
-        $lineList = $output === null || trim($output) === ''
-            ? []
-            : explode("\n", removeAnsiColors($output));
+        $result = Process::timeout(config('constants.ssh.command_timeout'))->run($sshCommand);
+        $lineList = mergeDockerLogStreams($result->output(), $result->errorOutput(), $timestamps);
 
         return $this->respond([
             'service_uuid' => $uuid,

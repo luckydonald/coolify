@@ -2,10 +2,12 @@
 
 namespace App\Mcp\Tools;
 
+use App\Helpers\SshMultiplexingHelper;
 use App\Mcp\Concerns\BuildsResponse;
 use App\Mcp\Concerns\ResolvesTeam;
 use App\Models\Application;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\Process;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -65,12 +67,14 @@ class GetApplicationLogs extends Tool
             $containerName = $containers->pluck('Names')->first();
 
             if ($containerName) {
-                $cmd = ($server->isSwarm() ? 'docker service logs' : 'docker logs')." -n {$lines}".($timestamps ? ' -t' : '')." {$containerName}";
-                $output = instant_remote_process([$cmd], $server, throwError: false);
+                $cmd = ($server->isSwarm() ? 'docker service logs' : 'docker logs')." -n {$lines} -t {$containerName}";
+                $sshCommand = SshMultiplexingHelper::generateSshCommand($server, $cmd);
+
+                $processResult = Process::timeout(config('constants.ssh.command_timeout'))->run($sshCommand);
 
                 $result['source'] = 'live';
                 $result['container'] = $containerName;
-                $result['lines'] = $output === null || trim($output) === '' ? [] : explode("\n", removeAnsiColors($output));
+                $result['lines'] = mergeDockerLogStreams($processResult->output(), $processResult->errorOutput(), $timestamps);
 
                 return $this->respond($result);
             }

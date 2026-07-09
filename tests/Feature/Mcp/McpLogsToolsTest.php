@@ -5,6 +5,7 @@ use App\Models\Application;
 use App\Models\ApplicationDeploymentQueue;
 use App\Models\Environment;
 use App\Models\InstanceSettings;
+use App\Models\PrivateKey;
 use App\Models\Project;
 use App\Models\Server;
 use App\Models\Service;
@@ -15,6 +16,7 @@ use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
@@ -67,6 +69,7 @@ beforeEach(function () {
     $this->team->members()->attach($this->user->id, ['role' => 'owner']);
     session(['currentTeam' => $this->team]);
 
+    PrivateKey::factory()->create(['team_id' => $this->team->id]);
     $this->server = Server::factory()->create(['team_id' => $this->team->id]);
     $this->destination = StandaloneDocker::where('server_id', $this->server->id)->first();
     $this->project = Project::factory()->create(['team_id' => $this->team->id]);
@@ -96,7 +99,7 @@ function seedDeployment(Application $application, array $overrides = []): Applic
 {
     return ApplicationDeploymentQueue::create(array_merge([
         'application_id' => $application->id,
-        'deployment_uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'deployment_uuid' => (string) Str::uuid(),
         'pull_request_id' => 0,
         'status' => ApplicationDeploymentStatus::FINISHED->value,
         'commit' => 'abc123',

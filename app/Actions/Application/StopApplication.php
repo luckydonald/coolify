@@ -4,7 +4,9 @@ namespace App\Actions\Application;
 
 use App\Actions\Server\CleanupDocker;
 use App\Events\ServiceStatusChanged;
+use App\Helpers\SshMultiplexingHelper;
 use App\Models\Application;
+use Illuminate\Support\Facades\Process;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 class StopApplication
@@ -40,10 +42,14 @@ class StopApplication
 
                 foreach ($containersToStop as $containerName) {
                     if (! $resetRestartCount) {
-                        $crashLog = instant_remote_process(["docker logs -n 500 -t $containerName"], $server, throwError: false);
-                        if ($crashLog !== null) {
+                        $sshCommand = SshMultiplexingHelper::generateSshCommand($server, "docker logs -n 500 -t $containerName");
+                        $processResult = Process::timeout(config('constants.ssh.command_timeout'))->run($sshCommand);
+                        $crashLogLines = mergeDockerLogStreams($processResult->output(), $processResult->errorOutput(), includeTimestamps: true);
+                        $crashLog = implode("\n", array_column($crashLogLines, 'line'));
+
+                        if ($crashLog !== '') {
                             $snapshot = $application->last_crash_logs ?? [];
-                            $snapshot[$containerName] = removeAnsiColors($crashLog);
+                            $snapshot[$containerName] = $crashLog;
                             $application->update([
                                 'last_crash_logs' => $snapshot,
                                 'last_crash_logs_captured_at' => now(),

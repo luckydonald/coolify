@@ -3,6 +3,7 @@
 use App\Livewire\Project\Shared\GetLogs;
 use App\Models\Application;
 use App\Models\Environment;
+use App\Models\PrivateKey;
 use App\Models\Project;
 use App\Models\Server;
 use App\Models\StandaloneDocker;
@@ -19,6 +20,7 @@ beforeEach(function () {
     $this->team = Team::factory()->create();
     $this->user->teams()->attach($this->team, ['role' => 'owner']);
 
+    PrivateKey::factory()->create(['team_id' => $this->team->id]);
     $this->server = Server::factory()->create(['team_id' => $this->team->id]);
     $this->destination = StandaloneDocker::where('server_id', $this->server->id)->first();
     $this->project = Project::factory()->create(['team_id' => $this->team->id]);

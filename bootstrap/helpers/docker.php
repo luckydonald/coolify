@@ -1318,6 +1318,55 @@ function getContainerLogs(Server $server, string $container_id, int $lines = 100
 
     return $output;
 }
+
+/**
+ * Merge a docker logs command's separately-captured stdout/stderr streams into a single
+ * chronologically ordered line list, tagging each line with which stream it came from.
+ *
+ * Docker writes a container's stdout lines to its own stdout and stderr lines to its own
+ * stderr — capturing only one stream silently drops the other. Both streams are expected to
+ * carry a leading docker `-t` timestamp (`2026-07-09T21:34:49.630614520Z <text>`), which is
+ * used to interleave them back into real chronological order.
+ *
+ * @return array<int, array{line: string, stderr: bool}>
+ */
+function mergeDockerLogStreams(?string $stdout, ?string $stderr, bool $includeTimestamps): array
+{
+    // Matches docker's `-t` RFC3339-nano timestamp prefix, e.g. "2026-07-09T21:34:49.630614520Z ".
+    $timestampPattern = '/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s(.*)$/s';
+
+    $parse = function (?string $text, bool $isStderr) use ($timestampPattern) {
+        $text = removeAnsiColors((string) $text);
+        if (trim($text) === '') {
+            return [];
+        }
+
+        return collect(explode("\n", $text))
+            ->filter(fn ($line) => $line !== '')
+            ->map(function ($line) use ($isStderr, $timestampPattern) {
+                if (preg_match($timestampPattern, $line, $matches)) {
+                    return ['timestamp' => $matches[1], 'text' => $matches[2], 'stderr' => $isStderr];
+                }
+
+                return ['timestamp' => null, 'text' => $line, 'stderr' => $isStderr];
+            })->all();
+    };
+
+    $combined = collect($parse($stdout, false))->concat($parse($stderr, true))->values();
+
+    // Only reorder when real docker timestamps are present to interleave streams chronologically.
+    // Otherwise (e.g. no timestamps captured) leave streams in stdout-then-stderr order.
+    if ($combined->contains(fn ($line) => $line['timestamp'] !== null)) {
+        $combined = $combined->sortBy(fn ($line) => $line['timestamp'] ?? '')->values();
+    }
+
+    return $combined
+        ->map(fn ($line) => [
+            'line' => $includeTimestamps && $line['timestamp'] ? "{$line['timestamp']} {$line['text']}" : $line['text'],
+            'stderr' => $line['stderr'],
+        ])
+        ->all();
+}
 function escapeEnvVariables($value)
 {
     $search = ['\\', "\r", "\t", "\x0", '"', "'"];
